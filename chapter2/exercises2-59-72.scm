@@ -235,4 +235,144 @@
   )
 )
 
+; Huffman Encoding Trees
+(define (make-leaf symbol weight) (list 'leaf symbol weight))
+(define (leaf? object) (eq? 'leaf (car object)))
+(define (symbol-leaf x) (cadr x))
+(define (weight-leaf x) (caddr x))
 
+(define (make-code-tree left right)
+  (list 
+    left 
+    right 
+    (append (symbols left) (symbols right))
+    (+ (weight left) (weight right))
+  )
+)
+(define (h-left-branch tree) (car tree))
+(define (h-right-branch tree) (cadr tree))
+(define (symbols tree)
+  (if (leaf? tree)
+    (list (symbol-leaf tree))
+    (caddr tree)
+  )
+)
+(define (weight tree)
+  (if (leaf? tree)
+    (weight-leaf tree)
+    (cadddr tree)
+  )
+)
+
+(define (choose-branch bit node)
+  (cond
+    ((= 0 bit) (h-left-branch node))
+    ((= 1 bit) (h-right-branch node))
+    (else (error "BAD MESSAGE: message not binary"))
+  )
+)
+(define (decode bits tree)
+  (define (decode-1 bits node)
+    (if (null? bits)
+      ()
+      (let ((next-node (choose-branch (car bits) node)))
+        (if (leaf? next-node)
+          (cons (symbol-leaf next-node) (decode-1 (cdr bits) tree))
+          (decode-1 (cdr bits) next-node)
+        )
+      )
+    )
+  )
+  (decode-1 bits tree)
+)
+
+(define (h-adjoin-set x set)
+  (cond
+    ((null? set) (list x))
+    ((< (weight x) (weight (car set))) (cons x set))
+    (else (cons (car set) (h-adjoin-set x (cdr set))))
+  )
+)
+(define (make-leaf-set pairs)
+  (if (null? pairs)
+    ()
+    (h-adjoin-set (make-leaf (caar pairs) (cadar pairs)) (make-leaf-set (cdr pairs)))
+  )
+)
+
+"Exercise 2-67"
+(define sample-tree
+  (make-code-tree 
+    (make-leaf 'A 4)
+    (make-code-tree
+      (make-leaf 'B 2)
+      (make-code-tree
+        (make-leaf 'D 1)
+        (make-leaf 'C 1)
+      )
+    )
+  )
+)
+(define sample-message '(0 1 1 0 0 1 0 1 0 1 1 1 0))
+; a d a b b c a 
+
+
+"Exercise 2-68"
+(define (encode message tree)
+  (if (null? message)
+    ()
+    (append (encode-symbol (car message) tree) (encode (cdr message) tree))
+  )
+)
+
+(define (encode-symbol x tree)
+  (cond
+    ((leaf? tree) ())
+    ((uo-element-of-set? x (symbols (h-left-branch tree))) 
+     (cons '0 (encode-symbol x (h-left-branch tree))))
+    ((uo-element-of-set? x (symbols (h-right-branch tree)))
+     (cons '1 (encode-symbol x (h-right-branch tree))))
+    (else (error "ERROR: letter not contained in this Huffman Tree"))
+  )
+)
+
+"Exercise 2-69"
+(define (generate-huffman-tree pairs)
+  (successive-merge (make-leaf-set pairs))
+)
+(define (successive-merge set)
+  (if (null? (cdr set))
+    (car set)
+    (let ((node1 (car set)) (node2 (cadr set)))
+      (successive-merge (h-adjoin-set (make-code-tree node1 node2) (cddr set)))
+    )
+  )
+)
+
+"Exercise 2-70"
+(define pairs '((A 2) (GET 2) (SHA 3) (WAH 1) (BOOM 1) (JOB 2) (NA 16) (YIP 9)))
+(define song '(
+  Get a job 
+  Sha na na na na na na na na
+  Get a job
+  Sha na na na na na na na na
+  Wah yip yip yip yip yip yip yip yip yip
+  Sha boom 
+))
+
+(define length-huffman (length (encode song (generate-huffman-tree pairs))))
+(define length-fixed 3 * (+ 2 2 3 1 1 2 16 9))
+
+; The Huffman encoding takes 84 bits
+; Since there are 8 tokens in our language, we need 3 bits per character in a 
+; fixed representation. There are 36 words in our song so the total fixed length 
+; encoding will take 108 bits 
+
+"Exercise 2-71"
+; Proof in journal
+
+"Exercise 2-72"
+; In the case above, the most frequent element will be the only left leaf from the top node
+; So encoding it is O(1)
+; The least frequent element will be (n-1) 1s and to encode it, we will need to make n-1 steps.
+; So encoding it is O(n - 1) = O(n)
