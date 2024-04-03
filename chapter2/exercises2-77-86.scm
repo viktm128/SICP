@@ -15,7 +15,7 @@
 
 (define (get op type)
   (define (get-helper k array)
-    (cond ((null? array) )
+    (cond ((null? array) #f)
           ((equal? (key (car array)) k) (value (car array)))
           (else (get-helper k (cdr array)))))
   (get-helper (list op type) global-array))
@@ -106,6 +106,8 @@
   (put 'div '(rational rational) (lambda (x y) (tag (div-rat x y))))
   (put 'equ? '(rational rational) (lambda (x y) (equal-rat? x y)))
   (put '=zero? '(rational) (lambda (x) (= 0 (numer x))))
+  (put 'numer '(rational) (lambda (x) (numer x)))
+  (put 'denom '(rational) (lambda (x) (denom x)))
   (put 'make 'rational (lambda (n d) (tag (make-rat n d))))
 )
 
@@ -202,21 +204,12 @@
 (install-rational-package)
 (install-complex-package)
 
-(define (apply-generic op . args)
-  (let ((type-tags (map type-tag args)))
-    (let ((proc (get op type-tags)))
-      (if proc
-        (apply proc (map contents args))
-        (error "No method listed for these types: APPLY-GENERIC" (list op type-tags))
-      )
-    )
-  )
-)
-
 (define (add x y) (apply-generic 'add x y))
 (define (sub x y) (apply-generic 'sub x y))
 (define (mul x y) (apply-generic 'mul x y))
 (define (div x y) (apply-generic 'div x y))
+(define (numer x) (apply-generic 'numer x))
+(define (denom x) (apply-generic 'denom x))
 (define (real z) (apply-generic 'real-part z))
 (define (imag z) (apply-generic 'imag-part z))
 (define (magnitude z) (apply-generic 'magnitude z))
@@ -260,3 +253,180 @@
 "Exercise 2-80"
 ; See internal definitions added to each package.
 (define (=zero? x) (apply-generic '=zero? x))
+
+
+; Coercion and Casting
+;
+; mit-scheme does not come equipped with get-coercion and put-coercion
+; the functions below emulate having an operation table with get and put
+(define coercion-array '())
+
+(define (put-coercion op type item)
+  (define (put-helper k array)
+    (cond ((null? array) (list(make-entry k item)))
+          ((equal? (key (car array)) k) array)
+          (else (cons (car array) (put-helper k (cdr array))))))
+  (set! coercion-array (put-helper (list op type) coercion-array)))
+
+(define (get-coercion op type)
+  (define (get-helper k array)
+    (cond ((null? array) #f)
+          ((equal? (key (car array)) k) (value (car array)))
+          (else (get-helper k (cdr array)))))
+  (get-helper (list op type) coercion-array))
+
+; Move apply-generic down here and re-write to include recursion attempts
+(define (apply-generic op . args)
+  (let ((type-tags (map type-tag args)))
+    (let ((proc (get op type-tags)))
+        (if proc
+        (apply proc (map contents args))
+        (if (= (length args) 2)
+          (let 
+            (
+              (type1 (car type-tags)) 
+              (type2 (cadr type-tags)) 
+              (a1 (car args)) 
+              (a2 (cadr args))
+            )
+            (if (not (eq? type1 type2))
+              (let
+                (
+                  (t1->t2 (get-coercion type1 type2))
+                  (t2->t1 (get-coercion type2 type1))
+                )
+                (cond
+                  (t1->t2 (apply-generic op (t1->t2 a1) a2))
+                  (t2->t1 (apply-generic op a1 (t2->t1 a2)))
+                  ((and (get-coercion type1 'RAISE) (get-coercion type2 'RAISE))
+                    (let 
+                      (
+                        (way1 (tower-coercion a1 a2))
+                        (way2 (tower-coercion a2 a1))
+                      )
+                      (cond
+                        (way1 (apply-generic op (car way1) (cadr way1)))
+                        (way2 (apply-generic op (car way2) (cadr way2)))
+                      )
+                    )
+                  )
+                  (else (error "No method listed for these types: APPLY-GENERIC" (list op type-tags)))
+                )
+              )
+              (error "No method listed for these types: APPLY-GENERIC" (list op type-tags))
+            )
+          )  
+          (error "No method listed for these types: APPLY-GENERIC" (list op type-tags))
+        )
+      )
+    )
+  )
+)
+
+"Exercise 2-81"
+; a) The procedure first tries to lookup an exp procedure
+; with two complex arguments. It however, cannot find one
+; in the procedure table. So it attempts to try casting
+; It will then get the two types and look for functions which
+; cast them into each other. If Louis has added a coercion 
+; for complex to complex, then it will successfully cast the 
+; first element two itself as a complex number. It will then call
+; apply-generic again with the arguments unchanged. So it will get
+; caught in a recursion loop forever.
+
+; b) Without having identity conversions in our coercion table
+; apply-generic will correctly identify that there is no way to 
+; to run the operation with these arguments. However, it will
+; waste time looking up these identity coercions. So the output
+; of the procedure is fine; however, it is inefficient.
+
+; c) See updated definition.
+
+"Exercise 2-82"
+; There is no clean way of treating a generic list of objects. In general, if you have
+; n arguments, with k_j different possible conversions of argument j based on its type,
+; then you are required to search all prod_1^n k_j combinations. You can use some nice
+; strategies to try and trim this search, but it will will be on the order of k^n. You also
+; need to maintain internal lists of what type each other type can be converted into.
+
+
+"Exercise 2-83"
+(define (raise-scheme n)
+  (if (exact? n)
+    (make-rational n 1)
+    (make-complex-from-real-imag n 0)
+  )
+)
+(define (raise-rational r) (inexact (/ (numer r) (denom r))))
+(put-coercion 'scheme-number 'RAISE raise-scheme)
+(put-coercion 'rational 'RAISE raise-rational)
+(put-coercion 'complex 'RAISE (lambda (x) x))  ; Identity raise for top of the tower
+
+(define (raise x)
+  (let ((type (type-tag x)))
+    (let ((proc (get-coercion type 'RAISE)))
+      (if proc
+        (proc x)
+        (error "Type not member of tower type structure. RAISE" (list x type))
+      )
+    )
+  )
+)
+
+"Exercise 2-84"
+(define (tower-coercion x y)
+  (let ((new (raise x)))
+    (cond
+      ((eq? (type-tag new) (type-tag x)) #f)
+      ((eq? (type-tag new) (type-tag y)) (list new y))
+      (else (tower-coercion new y))
+    )
+  )
+)
+; Please see (apply-generic) definition for the rest of the implementation
+
+
+
+"Exercise 2-85"
+(define (project-complex z) (inexact (real z)))
+(define (project-real x)
+  (if (exact? x)
+    x
+    (make-rational (round (* 10 10 10 10 10 10 x)) (* 10 10 10 10 10 10))
+  )
+)
+(define (project-rational x) (exact (round (/ (numer x) (denom x)))))
+(put-coercion 'complex 'PROJECT project-complex)
+(put-coercion 'scheme-number 'PROJECT project-real)
+(put-coercion 'rational 'PROJECT project-rational)
+
+(define (project x)
+  (let ((type (type-tag x)))
+    (let ((proc (get-coercion type 'PROJECT)))
+      (if proc
+        (proc x)
+        (error "Type not member of tower structure. PROJECT" (list x type))
+      )
+    )
+  )
+)
+
+(define (drop x)
+  (let ((p (project x)))
+    (if (equ? x (raise p))
+      (display p)
+      x
+    )
+  )
+)
+
+; Very easy to install drop because it only needs to be used in the apply line.
+
+"Exercise 2-86"
+; To update the complex package, in the definitions, all +, * need to be replaced with add and mul
+; Additionally, you would need to define generic trig functions which take type T to type T.
+; This is not guaranteed by any mathematical implementation. So functionally, you would have to tag every coefficient
+; unless it happened to be a real number. When you tag these coefficients, you might write (sine 1) as the imaginary 
+; part of some number. I will not be installing this change because I think it reduces the beauty of this program.
+; If you want to do something like this, well, you should define clear parameters on when you want sine to approximate a value
+; and when you want to represent the number abstractly.
