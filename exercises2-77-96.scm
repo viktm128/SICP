@@ -52,6 +52,7 @@
   (put 'sub '(scheme-number scheme-number) (lambda (x y) (tag (- x y))))
   (put 'mul '(scheme-number scheme-number) (lambda (x y) (tag (* x y))))
   (put 'div '(scheme-number scheme-number) (lambda (x y) (tag (/ x y))))
+  (put 'neg '(scheme-number) (lambda (x) (tag (- x))))
   (put 'equ? '(scheme-number scheme-number) (lambda (x y) (= x y)))
   (put '=zero? '(scheme-number) (lambda (x) (= x 0)))
   (put 'make 'scheme-number (lambda (x) (tag x)))
@@ -95,6 +96,9 @@
   (define (div-rat x y)
     (make-rat (* (numer x) (denom y)) (* (numer y) (denom x)))
   )
+  (define (neg-rat x)
+    (make-rat (- (numer x)) (denom x))
+  )
 
   (define (equal-rat? x y)
     (= (* (numer x) (denom y)) (* (numer y) (denom x)))
@@ -104,6 +108,7 @@
   (put 'sub '(rational rational) (lambda (x y) (tag (sub-rat x y))))
   (put 'mul '(rational rational) (lambda (x y) (tag (mul-rat x y))))
   (put 'div '(rational rational) (lambda (x y) (tag (div-rat x y))))
+  (put 'neg '(rational) (lambda (x) (tag (neg-rat x))))
   (put 'equ? '(rational rational) (lambda (x y) (equal-rat? x y)))
   (put '=zero? '(rational) (lambda (x) (= 0 (numer x))))
   (put 'numer '(rational) (lambda (x) (numer x)))
@@ -180,6 +185,9 @@
   (define (div-complex z1 z2)
     (make-from-mag-ang (/ (magnitude z1) (magnitude z2)) (- (angle z1) (angle z2)))
   )
+  (define (neg-complex z)
+    (make-from-real-imag (- (real-part z)) (- (imag-part z)))
+  )
   (define (equal-complex? z1 z2)
     (and (= (real-part z1) (real-part z2)) (= (imag-part z1) (imag-part z2)))
   )
@@ -188,6 +196,7 @@
   (put 'sub '(complex complex) (lambda (z1 z2) (tag (sub-complex z1 z2))))
   (put 'mul '(complex complex) (lambda (z1 z2) (tag (mul-complex z1 z2))))
   (put 'div '(complex complex) (lambda (z1 z2) (tag (div-complex z1 z2))))
+  (put 'neg '(complex) (lambda (z) (tag (neg-complex z))))
   (put 'equ? '(complex complex) (lambda (z1 z2) (equal-complex? z1 z2)))
   (put '=zero? '(complex) (lambda (z) (= 0 (magnitude z))))
   (put 'real-part '(complex) real-part)
@@ -208,6 +217,7 @@
 (define (sub x y) (apply-generic 'sub x y))
 (define (mul x y) (apply-generic 'mul x y))
 (define (div x y) (apply-generic 'div x y))
+(define (neg x) (apply-generic 'neg x))
 (define (numer x) (apply-generic 'numer x))
 (define (denom x) (apply-generic 'denom x))
 (define (real z) (apply-generic 'real-part z))
@@ -279,7 +289,7 @@
 (define (apply-generic op . args)
   (let ((type-tags (map type-tag args)))
     (let ((proc (get op type-tags)))
-        (if proc
+      (if proc
         (apply proc (map contents args))
         (if (= (length args) 2)
           (let 
@@ -414,7 +424,7 @@
 (define (drop x)
   (let ((p (project x)))
     (if (equ? x (raise p))
-      (display p)
+      (drop p)
       x
     )
   )
@@ -430,3 +440,199 @@
 ; part of some number. I will not be installing this change because I think it reduces the beauty of this program.
 ; If you want to do something like this, well, you should define clear parameters on when you want sine to approximate a value
 ; and when you want to represent the number abstractly.
+
+
+;---------------------------------------------------------------------------------------------------------------------------
+
+; Term Representation
+(define (install-term-package)
+  (define (tag x) (attach-tag 'term x))
+
+  (define (make-term order coeff) (list order coeff))
+  (define (order term) (car term))
+  (define (coeff term) (cadr term))
+  
+  (put 'make 'term (lambda (o c) (tag (make-term (o c)))))
+  (put 'order '(term) order)
+  (put 'coeff '(term) coeff)
+)
+
+; Dense Representation
+(define (install-dense-package)
+  (define (tag x) (attach-tag 'dense x))
+
+  (define (first-term tl) (make-term (- (length tl) 1) (car tl)))
+  (define (rest-terms tl) (cdr tl))
+  (define (adjoin-term term tl) 
+    (cond 
+      ((=zero? (coeff term)) tl)
+      ((= (order (term)) (+ (order (first-term tl)) 1)) (cons (coeff term) tl))
+      (else (adjoin-term term (cons 0 tl)))
+    )
+  )
+
+  (put 'empty-term-list? '(dense) (lambda (tl) (null? tl)))
+  (put 'first-term '(dense) first-term)
+  (put 'rest-terms '(dense) (lambda (tl) (tag (rest-terms tl))))
+  (put 'adjoin-term '(term dense) (lambda (term tl) (tag (adjoin-term term tl))))
+  (put 'make 'dense (lambda (tl) (tag tl)))
+)
+
+; Sparse Package
+(define (install-sparse-package)
+  (define (tag x) (attach-tag 'sparse x))
+
+  (define (first-term tl) (car tl))
+  (define (rest-terms tl) (cdr tl))
+  (define (adjoin-term term tl) 
+    (if (=zero? (coeff term))
+      tl 
+      (cons term tl)
+    )
+  )
+  
+  (put 'empty-term-list? '(sparse) (lambda (tl) (null? tl)))
+  (put 'first-term '(sparse) first-term)
+  (put 'rest-terms '(sparse) (lambda (tl) (tag (rest-terms tl))))
+  (put 'adjoin-term '(term sparse) (lambda (term tl) (tag (adjoin-term term tl))))
+  (put 'make 'sparse (lambda (tl) (tag tl)))
+)
+
+; Polynomial Representation
+(define (install-polynomial-package)
+  (define (tag x) (attach-tag 'polynomial x))
+
+  ; Term Representation
+  (install-term-package)
+  (define (make-term order coeff) ((get 'make 'term) order coeff))
+  (define (order term) ((get 'order 'term) term))
+  (define (coeff term) ((get 'coeff 'term) term))
+ 
+  ; Install Term List Representations
+  ; Note: internal term definitions to the term-list packages will refer to the definitions
+  ; above because they aren't defined in the package body, and therefore search upward by 
+  ; lexical scoping.
+  (install-sparse-package)
+  (install-dense-package)
+  (define (the-empty-term-list) ())
+  (define (empty-term-list? tl) (apply-generic 'empty-term-list? tl))
+  (define (first-term tl) (apply-generic 'first-term tl))
+  (define (rest-terms tl) (apply-generic 'rest-terms tl))
+  (define (adjoin-term term tl) (apply-generic 'adjoin-term term tl)) 
+  
+  ; Polynomial Selectors and Constructors 
+  (define (variable? x) (symbol? x))
+  (define (same-variable? x1 x2) (and (variable? x1) (variable? x2) (eq? x1 x2)))
+  (define (variable p) (car p))
+  (define (term-list p) (cadr p))
+  (define (make-from-sparse variable tl) (list variable ((get 'make 'sparse) tl)))
+  (define (make-from-dense variable tl) (list variable ((get 'make 'dense) tl)))
+
+  ; Polynomial Arithmetic
+  (define (add-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+      (make-poly (variable p1) (add-terms (term-list p1) (term-list p2)))
+      (error "Polys not in the same variable: ADD-POLY" (list p1 p2))
+    )
+  )
+  (define (add-terms L1 L2)
+    (cond
+      ((empty-term-list? L1) L2)
+      ((empty-term-list? L2) L1)
+      (else
+        (let 
+          (
+            (t1 (first-term L1))
+            (t2 (first-term L2))
+          )
+          (cond
+            ((> (order t1) (order t2)) (adjoin-term t1 (add-terms (rest-terms L1) L2)))
+            ((< (order t1) (order t2)) (adjoin-term t2 (add-terms L1 (rest-terms L2))))
+            (else (adjoin-term 
+                    (make-term (order t1) (add (coeff t1) (coeff t2))) 
+                    (add-terms (rest-terms L1) (rest-terms L2))
+                  )
+            )
+          )
+        )
+      )
+    )
+  )
+
+  (define (mul-poly p1 p2)
+    (if (same-variable? (variable p1) (variable p2))
+      (make-poly (variable p1) (mul-terms (term-list p1) (term-list p2)))
+      (error "Polys not in the same variable: ADD-POLY" (list p1 p2))
+    )
+  )
+  (define (mul-terms L1 L2)
+    (if (empty-term-list? L1)
+      (the-empty-term-list)
+      (add-terms 
+        (mul-term-by-all-terms (first-term L1) L2)
+        (mul-terms (rest-terms L1) L2)
+      )
+    )
+  )
+  (define (mul-term-by-all-terms t1 L)
+    (if (empty-term-list? L)
+      (the-empty-term-list)
+      (adjoin-term 
+        (make-term (+ (order t1) (order (first-term L))) (mul (coeff t1) (coeff (first-term L)))) 
+        (mul-term-by-all-terms t1 (rest-terms L))
+      )
+    )
+  )
+  (define (neg-poly p)
+    (make-poly (variable p) (negate-terms (term-list p)))
+  )
+  (define (negate-terms tl)
+    (if (empty-term-list? tl)
+      (the-empty-term-list)
+      (let ((ft (first-term tl)))
+        (adjoin-term (make-term (order ft) (neg (coeff ft))) (negate-terms (rest-terms tl)))
+      )
+    )
+  )
+  (define (sub-poly p1 p2)
+    (add-poly p1 (neg-poly p2))
+  )
+
+  (define (zero-poly? p) (empty-term-list? (term-list p)))
+
+  ; Upload to system
+  (put 'add '(polynomial polynomial) (lambda (p1 p2) (tag (add-poly p1 p2))))
+  (put 'mul '(polynomial polynomial) (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put 'neg '(polynomial) (lambda (p) (tag (neg-poly p))))
+  (put 'sub '(polynomial polynomial) (lambda (p1 p2) (tag (sub-poly p1 p2))))
+  (put 'make 'polynomial (lambda (var terms) (tag (make-poly var terms))))
+  (put '=zero? '(polynomial) zero-poly?)
+)
+
+(install-polynomial-package)
+(define (make-polynomial var terms) ((get 'make 'polynomial) var terms))
+; Coercions - constant polynomials
+(define (constant-polynomial x) 
+  (if (=zero? x)
+    (make-polynomial 'x ())
+    (make-polynomial 'x (list (list 0 x))))
+  )
+; TODO: still creates polynomials tied to x - shouldn't matter what the "variable" is
+(put-coercion 'scheme-number 'polynomial constant-polynomial)
+(put-coercion 'rational 'polynomial constant-polynomial)
+(put-coercion 'complex 'polynomial constant-polynomial)
+
+
+; Used for testing
+(define sp (make-polynomial 'x (list (list 100 1) (list 2 2) (list 0 1))))
+
+
+"Exercise 2-87"
+; Please see package for implementation
+
+"Exercise 2-88"
+; This will entail creating negation for all numbers --> see packages for implementation details
+; Now see polynomial package for subtraction details
+
+"Exercise 2-89"
+; Need to separate our term list representations. A lot should be similar
