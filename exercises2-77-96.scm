@@ -465,11 +465,12 @@
   (define (order term) (car term))
   (define (coeff term) (cadr term))
 
-  (define (first-term tl) (make-term (- (length tl) 1) (car tl)))
+  (define (first-term tl) (list (- (length tl) 1) (car tl)))
   (define (rest-terms tl) (cdr tl))
   (define (adjoin-term term tl) 
     (cond 
       ((=zero? (coeff term)) tl)
+      ((= 0 (length tl)) (list (coeff term)))
       ((= (order term) (+ (order (first-term tl)) 1)) (cons (coeff term) tl))
       (else (adjoin-term term (cons 0 tl)))
     )
@@ -492,9 +493,9 @@
 
   (define (first-term tl) (car tl))
   (define (rest-terms tl) (cdr tl))
-  (define (adjoin-term term tl) 
+  (define (adjoin-term term tl)
     (if (=zero? (coeff term))
-      tl 
+      tl
       (cons term tl)
     )
   )
@@ -557,10 +558,11 @@
           (cond
             ((> (order t1) (order t2)) (adjoin-term (attach-tag 'term t1) (add-terms (rest-terms L1) L2)))
             ((< (order t1) (order t2)) (adjoin-term (attach-tag 'term t2) (add-terms L1 (rest-terms L2))))
-            (else (adjoin-term 
+            (else 
+              (adjoin-term 
                     (make-term (order t1) (add (coeff t1) (coeff t2))) 
                     (add-terms (rest-terms L1) (rest-terms L2))
-                  )
+              )
             )
           )
         )
@@ -607,9 +609,37 @@
     (add-poly p1 (neg-poly p2))
   )
   (define (div-poly p1 p2)
-    (if (same-variable? (variable p1) (variable p2))
-      #t
-      #f
+    (cond
+      ((zero-poly? p2) (error "Divide by zero-poly: DIV-POLY" (list p1 p2)))
+      ((not (same-variable? (variable p1) (variable p2))) (error "Polys not in the same variable: DIV-POLY" (list p1 p2)))
+      (else (make-poly (variable p1) (car (div-terms (term-list p1) (term-list p2)))))
+    )
+  )
+  (define (div-terms L1 L2)
+    (if (empty-term-list? L1)
+      (list (the-empty-term-list) (the-empty-term-list))
+      (let 
+        (
+          (t1 (first-term L1))
+          (t2 (first-term L2))
+        )
+        (if (> (order t2) (order t1))
+          (list (the-empty-term-list) L1)
+          (let 
+            (
+              (new-c (div (coeff t1) (coeff t2)))
+              (new-o (- (order t1) (order t2)))
+            )
+            (let ((product (mul-term-by-all-terms (list new-o new-c) L2)))
+              (let ((new_L1 (add-terms L1 (negate-terms product))))
+                (let ((rest-of-result (div-terms new_L1 L2)))
+                  (list (adjoin-term (make-term new-o new-c) (car rest-of-result)) (cadr rest-of-result))
+                )
+              )
+            )
+          )
+        )
+      )
     )
   )
 
@@ -618,6 +648,7 @@
   ; Upload to system
   (put 'add '(polynomial polynomial) (lambda (p1 p2) (tag (add-poly p1 p2))))
   (put 'mul '(polynomial polynomial) (lambda (p1 p2) (tag (mul-poly p1 p2))))
+  (put 'div '(polynomial polynomial) (lambda (p1 p2) (tag (div-poly p1 p2))))
   (put 'neg '(polynomial) (lambda (p) (tag (neg-poly p))))
   (put 'sub '(polynomial polynomial) (lambda (p1 p2) (tag (sub-poly p1 p2))))
   (put 'make-from-sparse 'polynomial (lambda (var terms) (tag (make-from-sparse var terms))))
@@ -643,6 +674,7 @@
 
 ; Used for testing
 (define sp (make-polynomial-from-sparse 'x (list (list 100 1) (list 2 2) (list 0 1))))
+(define dp (make-polynomial-from-dense 'x (list 1 1)))
 
 
 "Exercise 2-87"
