@@ -206,3 +206,5 @@
   )
 )
 ; This is horrible... by the way addition evaluates (right to left????)
+
+"Exercises 3-9 to 3-11 can all be found in a notebook as they are drawing diagrams."

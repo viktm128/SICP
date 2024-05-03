@@ -694,4 +694,5 @@
 "Exercise 2-91"
 ; Please see the Polynomial package for the div-poly and div-term procedure definitions.
 
+;TODO
 "Exercises 2-92 to 2-96 will be completed at some other time as it is taking too long to do properly and still learn."
