@@ -216,3 +216,164 @@
 (front-insert-deque! d1 'a)
 (rear-insert-deque! d1 'b)
 (rear-insert-deque! d1 'c)
+
+
+; -----------------------------------------------------------------------------------------
+; Implementing Tables
+
+(define (make-table same-key?)
+  (define (assoc-proc key records)
+    (cond
+      ((null? records) #f)
+      ((same-key? key (caar records)) (car records))
+      (else (assoc-proc key (cdr records)))
+    )
+  )
+
+  (let ((local-table (list '*table*)))
+    (define (lookup key1 key2)
+      (let ((subtable (assoc-proc key1 (cdr local-table))))
+        (if subtable
+          (let ((record assoc-proc key2 (cdr subtable)))
+            (if record
+              (cdr record)
+              #f
+            )
+          )
+          #f
+        )
+      )
+    )
+    
+    (define (insert! key1 key2 value)
+      (let ((subtable (assoc-proc key1 (cdr local-table))))
+        (if subtable
+          (let ((record assoc-proc key2 (cdr subtable)))
+            (if record
+              (set-cdr! record value)
+              (set-cdr! subtable (cons (cons key2 value) (cdr subtable)))
+            )
+          )
+          (set-cdr! local-table (cons (list key1 (cons key2 value)) (cdr local-table)))
+        )
+      )
+      'ok
+    )
+    
+    (define (dispatch m)
+      (cond
+        ((eq? m 'lookup-proc) lookup)
+        ((eq? m 'insert-proc!) insert!)
+        (else (error "Unknown operation: TABLE" m))
+      )
+    )
+
+    dispatch
+  )
+)
+
+(define operation-table (make-table equal?))
+(define get (operation-table 'lookup-proc))
+(define put (operation-table 'insert-proc!))
+
+"Exercise 3-24"
+; Easy to fix, just add an argument to make-table, and it can be called by the 
+; definition of assoc-proc
+
+"Exercise 3-25"
+(define (make-table-n same-key?)
+  (define (assoc-proc key records)
+    (cond
+      ((null? records) #f)
+      ((same-key? key (caar records)) (car records))
+      (else (assoc-proc key (cdr records)))
+    )
+  )
+
+  (define (lookup-helper keys curr-table)
+    (let ((search-result (assoc-proc (car keys) (cdr curr-table))))
+      (cond
+        ((not search-result) #f)
+        ((null? (cdr keys)) (cdr serach-result))  ; Since its the last key, this is the record
+        (else (lookup-helper (cdr keys) (search-result)))  ; search-result is a subtable
+      )
+    )
+  )
+
+  (define (insert!-helper keys value curr-table)
+    (let ((search-result (assoc-proc (car keys) (cdr curr-table))))
+      (cond
+        ((and search-result (not (null? (cdr keys))))
+          (insert!-helper (cdr keys) value search-result)
+          (set-cdr! curr-table (cons () (cdr curr-table)))
+        )
+        ((and search-result (null? (cdr keys))) 
+          (set-cdr! search-result value)
+          'ok
+        )
+        ((null? (cdr keys)) 
+          (set-cdr! curr-table (cons (cons (car key) value) (cdr curr-table)))
+          'ok
+        )
+        (else
+          (set-cdr! curr-table (cons (list (car keys)) (cdr curr-table)))
+          (insert!-helper (cdr keys) value (cadr curr-table))  ; apply procedure on newly created table
+        )
+      )
+    )
+  )
+
+  (let ((local-table (list '*table*)))
+    (define (lookup keys) (lookup-helper keys local-table))
+    (define (insert! keys) (insert!-helper keys value local-table))
+ 
+    (define (dispatch m)
+      (cond
+        ((eq? m 'lookup-proc) lookup)
+        ((eq? m 'insert-proc!) insert!)
+        (else (error "Unknown operation: TABLE" m))
+      )
+    )
+
+    dispatch
+  )
+)
+
+
+
+"Exercise 3-26"
+; If you want to change the organization structure of an n-dim table, you will need to 
+; adapt the lookup and insert procedure to search pairs by binary tree. Not much should change.
+; Potentially, you could abstract the way the backbone of the table works that way you could
+; play with different implementations.
+
+"Exercise 3-27"
+(define (memoize f)
+  (let ((table (make-table)))
+    (lambda (x)
+      (let ((previously-computed-result ((table 'lookup-proc) x)))
+        (if previously-computed-result
+          previously-computed-result
+          (let ((result (f x)))
+            ((table 'insert-proc!) result)
+            result
+          )
+        )
+      )
+    )
+  )
+)
+
+(define (memo-fib n)
+  (memoize
+    (lambda (n)
+      (cond
+        ((= n 0) 0)
+        ((= n 1) 1)
+        (else (+ (memo-fib (- n 1)) (memo-fib (- n 2))))
+      )
+    )
+  )
+)
+
+; See environment diagram in notebook.
