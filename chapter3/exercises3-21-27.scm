@@ -234,7 +234,7 @@
     (define (lookup key1 key2)
       (let ((subtable (assoc-proc key1 (cdr local-table))))
         (if subtable
-          (let ((record assoc-proc key2 (cdr subtable)))
+          (let ((record (assoc-proc key2 (cdr subtable))))
             (if record
               (cdr record)
               #f
@@ -248,7 +248,7 @@
     (define (insert! key1 key2 value)
       (let ((subtable (assoc-proc key1 (cdr local-table))))
         (if subtable
-          (let ((record assoc-proc key2 (cdr subtable)))
+          (let ((record (assoc-proc key2 (cdr subtable))))
             (if record
               (set-cdr! record value)
               (set-cdr! subtable (cons (cons key2 value) (cdr subtable)))
