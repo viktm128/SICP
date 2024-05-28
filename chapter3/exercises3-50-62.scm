@@ -4,10 +4,10 @@
 ;                                                   b before handing it to cons. Otherwise, if
 ;                                                   implemented as written, no computation will
 ;                                                   be delayed.
-(define (stream-car s) (car s))
-(define (stream-cdr s) (force (cdr s)))
-(define (stream-null? s) (or (null? s) (null? (cdr s))))
-(define the-empty-stream '())
+;(define (stream-car s) (car s))
+;(define (stream-cdr s) (force (cdr s)))
+;(define (stream-null? s) (or (null? s) (null? (cdr s))))
+;(define the-empty-stream '())
 
 
 
@@ -95,7 +95,7 @@
 (define ones (cons-stream 1 ones))
 (define (add-streams s1 s2) (stream-map + s1 s2))
 (define alt-integers (cons-stream 1 (add-streams ones alt-integers)))
-(define alt-fibs (cons-stream 0 (cons-stream 1 (add-streams (stream-cdr fibs) fibs))))
+(define alt-fibs (cons-stream 0 (cons-stream 1 (add-streams (stream-cdr alt-fibs) alt-fibs))))
 
 (define (scale-stream s factor)
   (stream-map (lambda (x) (* x factor)) s)
@@ -181,7 +181,12 @@
 (define factorials (cons-stream 1 (mul-streams integers factorials)))
 
 "Exercise 3-55"
-(define (partial-sums s) (cons-stream 0 (add-streams s (partial-sums s))))
+(define (partial-sums s) 
+  (cons-stream 
+    (stream-car s) 
+    (add-streams (partial-sums s) (stream-cdr s))
+  )
+)
 ; I am confused how this works. Should draw it out at some point.
 
 "Exercise 3-56"
