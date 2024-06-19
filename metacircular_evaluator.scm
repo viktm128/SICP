@@ -80,14 +80,14 @@
 
 ; Assignment Package
 (define (install-assignment-package)
-  (define (assingment-variable expr) (cadr expr))
+  (define (assignment-variable expr) (cadr expr))
   (define (assignment-value expr) (caddr expr))
   (define (eval-assignment expr env)
     (set-variable-value! (assignment-variable expr) (eval-me (assignment-value expr) env) env)
     'ok
   )
   
-  (put 'eval 'set eval-assignment)
+  (put 'eval 'set! eval-assignment)
   'ok
 )
 
@@ -307,17 +307,17 @@
       (cons (cadar bindings) (binding-vals (cdr bindings)))
     )
   )
-  (define (make-let bindings body) (list 'let bindings body))
+  (define (make-let bindings body) (list 'let (list bindings) body))
 
   (define (let->combination expr)
     (if (named? expr)
       ((get 'make 'begin) 
         (list 
-          ((get 'make 'define) (name expr) ((get 'make 'lambda) (params (named-bindings expr)) (body expr)))
-          (list (name expr) (binding-vals (named-bindings expr)))
+          ((get 'make 'define) (cons (name expr) (params (named-bindings expr))) (named-body expr))
+          (cons (name expr) (binding-vals (named-bindings expr)))
         )
       ) 
-      (list
+      (cons
         ((get 'make 'lambda) (params (bindings expr)) (body expr)) 
         (binding-vals (bindings expr))
       )
@@ -343,7 +343,7 @@
   )
 
   (define (eval-let* expr env)
-    (eval-me (let*->nexted-let expr) env)
+    (eval-me (let*->nested-let expr) env)
   )
 
   (put 'eval 'let eval-let)
@@ -358,7 +358,15 @@
 
   ; this isn't actually iterative (i.e. tail recursion doesn't happen)
   (define (eval-while expr env)
-    (eval-me ((get 'make 'if) (eval-while expr env) 'ok) env)
+    (eval-me 
+      (
+       (get 'make 'if) 
+          (condition expr) 
+          ((get 'make 'begin) (list (body expr) expr))
+          'false
+      )
+      env
+    )
   )
 
   (put 'eval 'while eval-while)
@@ -488,6 +496,8 @@
     (list '* *)
     (list '/ /)
     (list '= =)
+    (list '< <)
+    (list '> >)
   )
 )
 
@@ -555,8 +565,8 @@
 (install-sequence-package)
 (install-cond-pacakge)
 (install-logical-package)
-(install-let-package)  ; TODO:still need to debug 
-(install-loops-package)  ; TODO:still need to debug 
+(install-let-package)
+(install-loops-package)
 
 (define the-global-environment (setup-environment))
 (driver-loop)
